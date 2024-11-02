@@ -1,0 +1,96 @@
+import numpy as np
+import pandas as pd
+import re
+from matplotlib.pyplot import subplots
+import matplotlib.pyplot as plt
+import statsmodels.api as sm
+from ISLP import load_data
+from ISLP.models import (ModelSpec as MS,
+                         summarize)
+
+#Importing sklearn tools
+from ISLP import confusion_table
+from ISLP.models import contrast
+from sklearn.discriminant_analysis import \
+    (LinearDiscriminantAnalysis as LDA,
+     QuadraticDiscriminantAnalysis as QDA)
+from sklearn.naive_bayes import GaussianNB
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+
+#---WEB SCRAPPING TOOLS-----
+import requests
+from bs4 import BeautifulSoup
+from selenium import webdriver
+
+# URL del sitio
+url_torneos = "https://metalairen.veicot.io/torneos"
+info_torneos = []
+
+# Usar Selenium para cargar la página si es dinámica
+driver = webdriver.Chrome()
+driver.get(url=url_torneos)
+driver.implicitly_wait(10)
+html = driver.page_source  # Obtener el HTML de la página cargada
+
+# Parsear el HTML con BeautifulSoup
+soup = BeautifulSoup(html, "html.parser")
+
+# Buscar el <tbody>
+tbody = soup.find('tbody')
+
+if tbody:  # Verificamos si el <tbody> fue encontrado
+    # Encontrar todas las filas dentro del <tbody>
+    filas = tbody.find_all('tr', class_="bg-white border-b dark:bg-gray-800 dark:border-gray-700")
+
+    # Recorrer cada fila y extraer la información
+    for fila in filas:
+        torneo = fila.find('a').get_text(strip=True) #AGARRO EL PRIMER ELEMENTO DE TR, VER HTML
+        celdas = fila.find_all('td')  #LISTO TODAS LAS COSAS QUE ESTEN CON TD
+
+        if len(celdas) >= 4:  # Asegurarnos de que hay al menos 4 celdas
+            lugar = celdas[0].get_text(strip=True)
+            provincia = celdas[1].get_text(strip=True)
+            fecha = celdas[2].get_text(strip=True)
+            ciudad = celdas[3].get_text(strip=True)
+            print(f"Torneo: {torneo} | Lugar: {lugar} | Provincia: {provincia} | Fecha: {fecha} | Ciudad: {ciudad}")
+            info_torneos.append([torneo,lugar.strip(), provincia, fecha, ciudad, []])
+        else:
+            print("No se encontró la información completa en esta fila")
+else:
+    print("No se encontró el <tbody> en el HTML")
+
+# Cerrar el navegador
+driver.quit()
+df_torneos= pd.DataFrame(info_torneos, columns=["Torneo","Lugar", "Provincia", "Fecha", "Ciudad", "Mazo"])
+#df_torneos.to_csv("Info de torneos", index=False)
+
+
+#---RECORRO INFO SOBRE JUGADORES EN CADA TORNEO---
+for i in range(1,7):
+    url_torneos_jugadores = f"https://metalairen.veicot.io/torneos/{i}"
+
+
+    try:
+        driver = webdriver.Chrome()
+        driver.get(url=url_torneos_jugadores)
+        driver.implicitly_wait(10)
+        html = driver.page_source
+        soup = BeautifulSoup(html, "html.parser")
+
+
+        jugadores = soup.find_all("a",class_="font-medium text-yellow-300 hover:text-yellow-400")
+        enlaces_jugadores = [jugador.get("href") for jugador in jugadores]
+        df_torneos.at[i-1,"Mazo"] = enlaces_jugadores
+
+        
+
+    except Exception as e:
+        print(f"Error en el torneo {i}:{e}")
+        continue
+
+driver.quit()
+
+df_torneos.to_csv("Info_de_torneos_actualizado.csv", index=False)
