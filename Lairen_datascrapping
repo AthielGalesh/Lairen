@@ -1,0 +1,106 @@
+import numpy as np
+import pandas as pd
+import re
+from matplotlib.pyplot import subplots
+import matplotlib.pyplot as plt
+import statsmodels.api as sm
+from ISLP import load_data
+from ISLP.models import (ModelSpec as MS,
+                         summarize)
+
+#Importing sklearn tools
+from ISLP import confusion_table
+from ISLP.models import contrast
+from sklearn.discriminant_analysis import \
+    (LinearDiscriminantAnalysis as LDA,
+     QuadraticDiscriminantAnalysis as QDA)
+from sklearn.naive_bayes import GaussianNB
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+
+#Importing web scrapping tools
+import requests
+from bs4 import BeautifulSoup
+from selenium import webdriver
+#from selenium.webdriver.opera.options import Options
+
+
+lairenbd = pd.read_csv("ListadoDeCartas.xlsx - Datos.csv")
+#print(lairenbd.columns)
+
+LDB = lairenbd.drop(columns=['Texto', 'Expansión', 'Rareza', 'Supertipo', 'Subtipo 1', 'Subtipo 2'])
+#print(LDB.head())
+
+#DEFINO LA LISTA DE CARTAS EN LOS TOP
+todas_las_cartas_TOP = []
+
+#hago web scrapping
+ultimo_mazo = 549
+
+for i in range(0,548):
+    num_mazo = ultimo_mazo - i
+    num_torneo = i
+
+    url = f"https://metalairen.veicot.io/mazos/{num_mazo}"
+
+    driver = webdriver.Chrome()
+
+
+
+    driver.get(url=url)
+    driver.implicitly_wait(10)
+
+    html = driver.page_source
+    soup = BeautifulSoup(html, "html.parser")
+
+    #--PROCESO PARA GUARDAR TODAS LAS CARTAS EN UN DATA FRAME
+    cuadro_de_text = soup.select_one("textarea")
+    datos_mazo = soup.find("span", class_="ms-1 text-sm font-medium text-gray-500 md:ms-2 dark:text-gray-400")
+    try:
+        subtipos = soup.find("h2",class_="text-xl dark:text-white font-extrabold text-gray-900").get_text(strip = True)
+        print(subtipos)
+    except:
+        print("No hay info sobre subtipos")
+        continue
+    try:
+        datos = datos_mazo.get_text(strip=True)
+        TOP = re.findall(r'\d+', datos)
+        print(datos)
+
+        if "TOP" in datos:
+            print(f"Este tipo es TOP, este link es el numero {num_mazo}. Guardamos su deck :)")
+            mazo = cuadro_de_text.get_text()
+
+        #print(mazo)
+            lineas = mazo.splitlines()
+            cartas = []
+            for linea in lineas:
+                if "x" in linea:
+                    nombre, cantidad = linea.split(" x")
+                    cartas.append([nombre.strip(), int(cantidad), TOP, subtipos, num_mazo, datos]) #--ACA VOY LLENANDO LA DATAFRAME----
+
+            todas_las_cartas_TOP.extend(cartas)
+
+            df = pd.DataFrame(cartas, columns=["Carta", "Cantidad", "TOP"])
+        #print(df)
+            df.to_csv("cartas.csv", index=False)
+        else:
+            print(f"el loco no es top, re pt, o no existe el mazo numero:{num_mazo} pasamos al siguiente...")
+
+    except:
+        continue
+
+
+
+
+
+
+    driver.quit()
+df_final= pd.DataFrame(todas_las_cartas_TOP, columns=["Carta", "Cantidad", "TOP", "Subtipos","Numero de Mazo", "Datos de origen"])
+df_final.to_csv("todas las cartas en TOP", index=False)
+
+
+#---AGREGO INFO SOBRE EL TORNEO Y LA FECHA A MANO, NO ES LO IDEAL. HABLAR CON SANTI -----#
+#--- TENGO UNA IDEA, USO EL LINK COMO INDICE!!!!!---#
